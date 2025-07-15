@@ -1,0 +1,96 @@
+# A simplified GitHub Actions workflow to build the wxPython application.
+# This version removes all secrets, signing, and notarization steps
+# to focus solely on compiling the project and creating artifacts.
+
+name: CI - Build wxPython
+
+on:
+  # Triggers the workflow on pushes to the repository, ignoring changes in the 'docs' folder.
+  push:
+    paths-ignore:
+      - 'docs/**'
+  # Allows the workflow to be manually triggered from the GitHub Actions UI.
+  workflow_dispatch:
+  # Triggers the workflow when a new release is published.
+  release:
+    types: [published]
+
+jobs:
+  build:
+    name: Build wxPython
+    # Uses a macOS Monterey runner. Note that specific Python versions might be pre-installed.
+    runs-on: macos-12
+
+    steps:
+      # Step 1: Check out the repository's code
+      # This downloads the source code to the runner so it can be built.
+      - name: Checkout repository code
+        uses: actions/checkout@v4
+
+      # Step 2: Install Python dependencies
+      # Reads the requirements.txt file to install the necessary Python packages.
+      # This step is crucial for the build script to run correctly.
+      - name: Install Dependencies
+        run: /usr/bin/python3 -m pip install -r requirements.txt
+
+      # Step 3: Build the project
+      # This runs the main build script. The arguments for signing, notarization,
+      # and analytics have been removed for a simple, unsigned build.
+      - name: Build the Application
+        run: |
+          /usr/bin/python3 Build-Project.command --run-as-individual-steps --reset-dmg-cache --prepare-assets
+          /usr/bin/python3 Build-Project.command --reset-pyinstaller-cache --run-as-individual-steps --prepare-application
+          /usr/bin/python3 Build-Project.command --run-as-individual-steps --prepare-package
+
+      # Step 4: Upload build artifacts
+      # These steps take the compiled packages from the 'dist' directory and save them
+      # as downloadable artifacts for this workflow run. This is useful for testing
+      # builds from pushes or manual runs.
+      - name: Upload AutoPkg Package to Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: AutoPkg-Assets.pkg
+          path: ./dist/AutoPkg-Assets.pkg
+
+      - name: Upload Installation Package to Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenCore-Patcher.pkg
+          path: ./dist/OpenCore-Patcher.pkg
+
+      - name: Upload Uninstaller Package to Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenCore-Patcher-Uninstaller.pkg
+          path: ./dist/OpenCore-Patcher-Uninstaller.pkg
+
+      # Step 5: Upload build artifacts to a GitHub Release
+      # If the workflow was triggered by a release event, these steps will upload
+      # the packages directly to the release page for users to download.
+      # It uses the default GITHUB_TOKEN, which doesn't need to be configured manually.
+      - name: Upload AutoPkg Package to Release
+        if: github.event_name == 'release'
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: ./dist/AutoPkg-Assets.pkg
+          tag: ${{ github.ref }}
+          file_glob: true
+
+      - name: Upload Installation Package to Release
+        if: github.event_name == 'release'
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: ./dist/OpenCore-Patcher.pkg
+          tag: ${{ github.ref }}
+          file_glob: true
+
+      - name: Upload Uninstaller Package to Release
+        if: github.event_name == 'release'
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: ./dist/OpenCore-Patcher-Uninstaller.pkg
+          tag: ${{ github.ref }}
+          file_glob: true
